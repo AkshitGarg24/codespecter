@@ -3,21 +3,29 @@ import { useState } from 'react';
 import { signIn } from '@/lib/auth-client';
 import { Code2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 import { Github, Ghost, ShieldCheck, Zap } from 'lucide-react';
 
 const LoginUI = () => {
   const [loading, setIsLoading] = useState(false);
 
   const handleGithubSignIn = async () => {
-    setIsLoading(true);
-    try {
-      await signIn.social({
-        provider: 'github',
-      });
-    } catch (error) {
-      console.log(error);
-    }
-    setIsLoading(false);
+    await signIn.social({
+      provider: 'github',
+      fetchOptions: {
+        onRequest: () => {
+          setIsLoading(true);
+        },
+        onSuccess: () => {
+          toast.success('Signed In Successfully.');
+          setIsLoading(false);
+        },
+        onError: (err) => {
+          toast.error(`Error: ${err}`);
+          setIsLoading(false);
+        },
+      },
+    });
   };
 
   return (
