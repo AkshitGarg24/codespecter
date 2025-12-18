@@ -1,8 +1,8 @@
 import { Octokit } from 'octokit';
+import { unstable_cache } from 'next/cache';
+import { GithubViewerResponse, DashboardStats } from './types';
 import { auth } from '@/lib/auth';
-import prisma from '@/lib/db';
 import { headers } from 'next/headers';
-import { GithubUserResponse } from './types';
 
 export const getGithubToken = async () => {
   const { accessToken } = await auth.api.getAccessToken({
@@ -17,126 +17,106 @@ export const getGithubToken = async () => {
   return accessToken;
 };
 
-export async function getAuthenticatedUser(token: string) {
+async function fetchRawViewerData(token: string) {
   const octokit = new Octokit({ auth: token });
 
-  const response = await octokit.graphql<{ viewer: { login: string } }>(
+  return octokit.graphql<GithubViewerResponse>(
     `
       query { 
         viewer { 
-          login 
-        }  
-      }
-    `
-  );
-
-  return response.viewer.login;
-}
-
-export async function fetchGithubData(token: string, username: string) {
-  const octokit = new Octokit({ auth: token });
-
-  try {
-    const response = await octokit.graphql<GithubUserResponse>(
-      `
-        query($username: String!) {
-          user(login: $username) {
-            name
-            login
-            avatarUrl
-            followers { totalCount }
-            following { totalCount }
-            
-            # Get top 100 repos to calculate total stars/forks
-            repositories(first: 100, ownerAffiliations: OWNER, orderBy: {field: STARGAZERS, direction: DESC}) {
-              totalCount
-              nodes {
-                name
-                stargazerCount
-                forkCount
-                primaryLanguage {
-                  name
+          login
+          name
+          avatarUrl
+          followers { totalCount }
+          following { totalCount }
+          
+          repositories(first: 100, ownerAffiliations: OWNER, orderBy: {field: STARGAZERS, direction: DESC}) {
+            totalCount
+            nodes {
+              name
+              stargazerCount
+              forkCount
+              primaryLanguage { name color }
+            }
+          }
+          
+          contributionsCollection {
+            totalCommitContributions
+            totalPullRequestContributions
+            totalIssueContributions
+            contributionCalendar {
+              totalContributions
+              weeks {
+                contributionDays {
+                  contributionCount
+                  date
                   color
                 }
               }
             }
-            
-            # Get contribution counts and calendar
-            contributionsCollection {
-              totalCommitContributions
-              totalPullRequestContributions
-              totalIssueContributions
-              contributionCalendar {
-                totalContributions
-                weeks {
-                  contributionDays {
-                    contributionCount
-                    date
-                    color
-                  }
-                }
-              }
-            }
           }
-        }
-      `,
-      { username }
-    );
-
-    return response.user;
-  } catch (error) {
-    console.error('Error fetching GitHub data:', error);
-    return null;
-  }
+        } 
+      }
+    `
+  );
 }
 
-export function getDashboardStats(userData: GithubUserResponse['user']) {
-  const repoStats = userData.repositories.nodes.reduce(
+function processGithubData(data: GithubViewerResponse): DashboardStats {
+  const user = data.viewer;
+  const repoStats = user.repositories.nodes.reduce(
     (acc, repo) => ({
-      stars: acc.stars + repo.starCount,
+      stars: acc.stars + repo.stargazerCount,
       forks: acc.forks + repo.forkCount,
     }),
     { stars: 0, forks: 0 }
   );
 
-  return {
-    username: userData.login,
-    name: userData.name,
-    avatar: userData.avatarUrl,
-    followers: userData.followers.totalCount,
-    following: userData.following.totalCount,
-    totalRepos: userData.repositories.totalCount,
-    totalStars: repoStats.stars,
-    totalForks: repoStats.forks,
-    totalCommits: userData.contributionsCollection.totalCommitContributions,
-    totalPRs: userData.contributionsCollection.totalPullRequestContributions,
-    totalIssues: userData.contributionsCollection.totalIssueContributions,
-    totalContributions:
-      userData.contributionsCollection.contributionCalendar.totalContributions,
-  };
-}
-
-export function getMonthlyActivity(userData: GithubUserResponse['user']) {
-  const calendar = userData.contributionsCollection.contributionCalendar;
-  const monthlyStats: Record<string, number> = {};
-
-  calendar.weeks.forEach((week) => {
+  const monthlyMap: Record<string, number> = {};
+  user.contributionsCollection.contributionCalendar.weeks.forEach((week) => {
     week.contributionDays.forEach((day) => {
-      const dateObj = new Date(day.date);
-      const monthKey = dateObj.toLocaleString('default', {
+      const key = new Date(day.date).toLocaleString('default', {
         month: 'short',
         year: 'numeric',
       });
-
-      if (!monthlyStats[monthKey]) {
-        monthlyStats[monthKey] = 0;
-      }
-      monthlyStats[monthKey] += day.contributionCount;
+      monthlyMap[key] = (monthlyMap[key] || 0) + day.contributionCount;
     });
   });
 
-  return Object.entries(monthlyStats).map(([month, count]) => ({
+  const monthlyActivity = Object.entries(monthlyMap).map(([month, count]) => ({
     month,
     count,
   }));
+
+  return {
+    username: user.login,
+    name: user.name,
+    avatar: user.avatarUrl,
+    followers: user.followers.totalCount,
+    following: user.following.totalCount,
+    totalRepos: user.repositories.totalCount,
+    totalStars: repoStats.stars,
+    totalForks: repoStats.forks,
+    totalCommits: user.contributionsCollection.totalCommitContributions,
+    totalPRs: user.contributionsCollection.totalPullRequestContributions,
+    totalIssues: user.contributionsCollection.totalIssueContributions,
+    totalContributions:
+      user.contributionsCollection.contributionCalendar.totalContributions,
+    monthlyActivity,
+  };
+}
+
+export async function getCachedGithubStats(userId: string, token: string) {
+  const getCachedFn = unstable_cache(
+    async () => {
+      const rawData = await fetchRawViewerData(token);
+      return processGithubData(rawData);
+    },
+    [`github-stats-${userId}`],
+    {
+      revalidate: 120,
+      tags: [`user-stats-${userId}`],
+    }
+  );
+
+  return getCachedFn();
 }

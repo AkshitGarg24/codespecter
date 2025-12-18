@@ -15,7 +15,7 @@ export interface ContributionCalendar {
 
 export interface RepoNode {
   name: string;
-  starCount: number;
+  stargazerCount: number;
   forkCount: number;
   primaryLanguage: {
     name: string;
@@ -47,8 +47,13 @@ export interface GithubUser {
   contributionsCollection: ContributionsCollection;
 }
 
-export interface GithubUserResponse {
-  user: GithubUser;
+export interface GithubViewerResponse {
+  viewer: GithubUser;
+}
+
+export interface MonthlyActivityItem {
+  month: string;
+  count: number;
 }
 
 export interface DashboardStats {
@@ -64,11 +69,5 @@ export interface DashboardStats {
   totalPRs: number;
   totalIssues: number;
   totalContributions: number;
+  monthlyActivity: MonthlyActivityItem[];
 }
-
-export interface MonthlyActivityItem {
-  month: string;
-  count: number;
-}
-
-export type MonthlyActivity = MonthlyActivityItem[];

@@ -179,7 +179,9 @@ const AppSidebar = () => {
 
                   <div className="grid flex-1 text-left text-sm leading-tight gap-0.5">
                     <span className="truncate font-semibold">{userName}</span>
-                    <span className="truncate text-xs">{userEmail}</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {userEmail}
+                    </span>
                   </div>
 
                   <ChevronsUpDown className="ml-auto size-4" />
