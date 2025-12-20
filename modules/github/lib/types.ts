@@ -71,3 +71,30 @@ export interface DashboardStats {
   totalContributions: number;
   monthlyActivity: MonthlyActivityItem[];
 }
+
+export interface RepoListNode {
+  id: bigint;
+  name: string;
+  stargazerCount: number;
+  updatedAt: string;
+  url: string;
+  isPrivate: boolean;
+  primaryLanguage: {
+    name: string;
+    color: string;
+  } | null;
+}
+
+export interface PageInfo {
+  endCursor: string | null;
+  hasNextPage: boolean;
+}
+
+export interface RepoPage {
+  nodes: RepoListNode[];
+  pageInfo: PageInfo;
+}
+
+export interface RepoListResponse {
+  repositories: RepoPage;
+}
