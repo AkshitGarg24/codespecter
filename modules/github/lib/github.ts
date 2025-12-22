@@ -1,6 +1,6 @@
 import { Octokit } from 'octokit';
 import { unstable_cache } from 'next/cache';
-import { GithubViewerResponse, DashboardStats, RepoListResponse } from './types';
+import { GithubViewerResponse, DashboardStats, RepoPage } from './types';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 
@@ -121,21 +121,23 @@ export async function getCachedGithubStats(userId: string, token: string) {
   return getCachedFn();
 }
 
-
-export async function fetchUserRepos(token: string, cursor?: string | null, searchQuery?: string) {
+export async function fetchUserRepos(
+  token: string,
+  cursor?: string | null,
+  searchQuery?: string
+): Promise<RepoPage> {
   const octokit = new Octokit({ auth: token });
 
   // CASE A: Search Mode
   if (searchQuery) {
-    const searchResponse = await octokit.graphql<{ search: any }>(
+    const searchResponse = await octokit.graphql<{ search: RepoPage }>(
       `
-        # 1. RENAME VARIABLE: $query -> $searchQuery
         query($searchQuery: String!, $cursor: String) {
-          # 2. USE NEW NAME: query: $searchQuery
           search(query: $searchQuery, type: REPOSITORY, first: 10, after: $cursor) {
             nodes {
               ... on Repository {
                 id
+                databaseId 
                 name
                 stargazerCount
                 updatedAt
@@ -151,17 +153,15 @@ export async function fetchUserRepos(token: string, cursor?: string | null, sear
           }
         }
       `,
-      { 
-        // 3. PASS NEW VARIABLE NAME
-        searchQuery: `user:@me ${searchQuery} sort:updated-desc`,
-        cursor 
-      }
+      { searchQuery: `user:@me ${searchQuery} sort:updated-desc`, cursor }
     );
     return searchResponse.search;
   }
 
-  // CASE B: List Mode (No changes needed here)
-  const listResponse = await octokit.graphql<{ viewer: { repositories: any } }>(
+  // CASE B: List Mode
+  const listResponse = await octokit.graphql<{
+    viewer: { repositories: RepoPage };
+  }>(
     `
       query($cursor: String) { 
         viewer { 
@@ -173,6 +173,7 @@ export async function fetchUserRepos(token: string, cursor?: string | null, sear
           ) {
             nodes {
               id
+              databaseId 
               name
               stargazerCount
               updatedAt

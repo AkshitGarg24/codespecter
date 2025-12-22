@@ -21,7 +21,8 @@ const LoginUI = () => {
           setIsLoading(false);
         },
         onError: (err) => {
-          toast.error(`Error: ${err}`);
+          toast.error(`Error: ${err.error}`);
+          console.log(err);
           setIsLoading(false);
         },
       },

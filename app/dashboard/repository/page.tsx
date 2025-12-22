@@ -1,5 +1,5 @@
-import { getRepositoriesAction } from "@/modules/repositories/action"; 
-import RepositoryList from "@/modules/repositories/components/repository-list";
+import { getRepositoriesAction } from '@/modules/repositories/action';
+import RepositoryList from '@/modules/repositories/components/repository-list';
 
 export default async function ImportPage() {
   const firstPageData = await getRepositoriesAction(null);

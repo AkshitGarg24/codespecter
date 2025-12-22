@@ -12,6 +12,25 @@ CREATE TABLE "user" (
 );
 
 -- CreateTable
+CREATE TABLE "repository" (
+    "id" TEXT NOT NULL,
+    "githubId" BIGINT NOT NULL,
+    "name" TEXT NOT NULL,
+    "owner" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "webhookId" BIGINT,
+    "isPrivate" BOOLEAN NOT NULL,
+    "stargazerCount" INTEGER NOT NULL DEFAULT 0,
+    "primaryLanguage" TEXT,
+    "languageColor" TEXT,
+    "userId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "repository_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "session" (
     "id" TEXT NOT NULL,
     "expiresAt" TIMESTAMP(3) NOT NULL,
@@ -60,6 +79,12 @@ CREATE TABLE "verification" (
 CREATE UNIQUE INDEX "user_email_key" ON "user"("email");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "repository_githubId_key" ON "repository"("githubId");
+
+-- CreateIndex
+CREATE INDEX "repository_userId_idx" ON "repository"("userId");
+
+-- CreateIndex
 CREATE INDEX "session_userId_idx" ON "session"("userId");
 
 -- CreateIndex
@@ -70,6 +95,9 @@ CREATE INDEX "account_userId_idx" ON "account"("userId");
 
 -- CreateIndex
 CREATE INDEX "verification_identifier_idx" ON "verification"("identifier");
+
+-- AddForeignKey
+ALTER TABLE "repository" ADD CONSTRAINT "repository_userId_fkey" FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "session" ADD CONSTRAINT "session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -73,7 +73,8 @@ export interface DashboardStats {
 }
 
 export interface RepoListNode {
-  id: bigint;
+  id: string;
+  databaseId: number;
   name: string;
   stargazerCount: number;
   updatedAt: string;
@@ -83,6 +84,7 @@ export interface RepoListNode {
     name: string;
     color: string;
   } | null;
+  isConnected?: boolean;
 }
 
 export interface PageInfo {
