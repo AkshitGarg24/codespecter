@@ -2,6 +2,7 @@
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { inngest } from '@/inngest/client';
 
 export async function POST(req: Request) {
   try {
@@ -59,8 +60,15 @@ export async function POST(req: Request) {
           `Triggering AI for PR #${pull_request.number} in ${repository.full_name}`
         );
 
-        // TODO: Call your AI Service here
-        // await analyzePr(pull_request.number, repository.full_name, repository.id);
+        await inngest.send({
+          name: 'pr.review', // Must match the event name in review-pr.ts
+          data: {
+            repoId: repository.id, // Needed for DB lookup
+            prNumber: pull_request.number,
+            owner: repository.owner.login,
+            repo: repository.name,
+          },
+        });
       }
     }
 
