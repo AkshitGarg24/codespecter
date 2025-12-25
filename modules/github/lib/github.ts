@@ -194,3 +194,65 @@ export async function fetchUserRepos(
 
   return listResponse.viewer.repositories;
 }
+
+export async function getRepoFileStructure(token: string, owner: string, repo: string) {
+  const octokit = new Octokit({ auth: token });
+
+  const { data: repoData } = await octokit.rest.repos.get({
+    owner,
+    repo,
+  });
+
+  const defaultBranch = repoData.default_branch;
+
+  // 1. Get the HEAD commit to find the tree SHA
+  const { data: commit } = await octokit.rest.repos.getCommit({
+    owner,
+    repo,
+    ref: defaultBranch,
+  });
+
+  // 2. Fetch the ENTIRE tree in 1 call (Recursive)
+  const { data: tree } = await octokit.rest.git.getTree({
+    owner,
+    repo,
+    tree_sha: commit.commit.tree.sha,
+    recursive: "true"
+  });
+
+  // 3. Filter for valid code files only
+  return tree.tree
+    .filter(item =>
+      item.type === "blob" &&
+      item.path &&
+      // Ensure we allow .ts, .js, .tsx, .py etc.
+      !item.path.match(/\.(png|jpg|jpeg|gif|svg|ico|pdf|zip|lock|json|map)$/i) &&
+      !item.path.includes("node_modules")
+    )
+    .map(item => item.path!);
+}
+
+// Helper to fetch content for a BATCH of files (e.g., 10 at a time)
+export async function fetchFileContentBatch(token: string, owner: string, repo: string, paths: string[]) {
+  const octokit = new Octokit({ auth: token });
+
+  // We use Promise.all to fetch these in parallel
+  const results = await Promise.all(
+    paths.map(async (path) => {
+      try {
+        const { data } = await octokit.rest.repos.getContent({ owner, repo, path });
+        if ('content' in data) {
+          return {
+            path,
+            content: Buffer.from(data.content, "base64").toString('utf-8')
+          };
+        }
+      } catch (e) {
+        console.error(`Failed to fetch ${path}`, e);
+      }
+      return null;
+    })
+  );
+
+  return results.filter(Boolean) as { path: string, content: string }[];
+}

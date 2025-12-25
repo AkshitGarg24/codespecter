@@ -1,8 +1,10 @@
 import { serve } from 'inngest/next';
 import { inngest } from '@/inngest/client';
 import { reviewPr } from '@/inngest/functions/review-pr';
+import { indexRepo } from '@/inngest/functions/index-repo';
+import { deleteRepo } from '@/inngest/functions/delete-repo';
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [reviewPr],
+  functions: [reviewPr, indexRepo, deleteRepo],
 });

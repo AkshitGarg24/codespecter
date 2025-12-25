@@ -8,6 +8,7 @@ import prisma from '@/lib/db';
 import { requireAuth } from '../auth/utils/auth-utils';
 import { RepoListNode } from '../github/lib/types';
 import { revalidatePath } from 'next/cache';
+import { inngest } from '@/inngest/client';
 
 export async function getRepositoriesAction(
   cursor?: string | null,
@@ -39,9 +40,9 @@ export async function getRepositoriesAction(
       isConnected: true, // Always true in this view
       primaryLanguage: repo.primaryLanguage
         ? {
-            name: repo.primaryLanguage,
-            color: repo.languageColor || '#ccc',
-          }
+          name: repo.primaryLanguage,
+          color: repo.languageColor || '#ccc',
+        }
         : null,
     }));
 
@@ -96,6 +97,16 @@ export async function connectRepositoryAction(repoData: RepoListNode) {
   try {
     webhookId = await createWebHook(token, owner, repo);
 
+    await inngest.send({
+      name: "repository.indexing",
+      data: {
+        owner,
+        repo,
+        userId: session.user.id,
+        repoId: repoData.databaseId
+      }
+    });
+
     await prisma.repository.create({
       data: {
         githubId: repoData.databaseId,
@@ -109,6 +120,7 @@ export async function connectRepositoryAction(repoData: RepoListNode) {
     });
 
     revalidatePath('/dashboard');
+
     return { success: true };
   } catch (error) {
     console.error('Connect Failed:', error);
@@ -132,16 +144,36 @@ export async function disconnectRepositoryAction(repoId: number) {
   });
 
   if (!repo) return { error: 'Repository not found' };
+
   try {
+    // 1. Delete GitHub Webhook
     if (repo.webhookId) {
-      await deleteWebHook(token, repo.owner, repo.name, Number(repo.webhookId));
+      // We wrap this in a try-catch so one API failure doesn't stop the DB deletion
+      try {
+        await deleteWebHook(token, repo.owner, repo.name, Number(repo.webhookId));
+      } catch (e) {
+        console.error("Failed to delete webhook from GitHub", e);
+        // Continue execution...
+      }
     }
 
+    // 2. Trigger Background Vector Cleanup (Inngest)
+    // We fire this BEFORE deleting from DB to ensure we have the ID, 
+    // but Inngest is async so it won't block.
+    await inngest.send({
+      name: "repo.delete",
+      data: {
+        repoId: repoId.toString() // Convert BigInt/Number to string for JSON
+      }
+    });
+
+    // 3. Delete from Database
     await prisma.repository.delete({ where: { id: repo.id } });
 
     revalidatePath('/dashboard');
     return { success: true };
-  } catch {
+  } catch (error) {
+    console.error("Disconnect Error:", error);
     return { error: 'Failed to disconnect' };
   }
 }
@@ -156,7 +188,7 @@ export async function disconnectAllRepositoriesAction() {
 
   if (repos.length === 0) return { success: true };
 
-  // 2. Parallel Webhook Deletion (Optimized)
+  // 1. Parallel Webhook Deletion (Keep your existing logic)
   await Promise.allSettled(
     repos.map((repo) => {
       if (repo.webhookId) {
@@ -170,6 +202,22 @@ export async function disconnectAllRepositoriesAction() {
       return Promise.resolve();
     })
   );
+
+  // 2. Batch Trigger Inngest (OPTIMIZED)
+  // Instead of calling inngest.send() 50 times, we send 1 array.
+  // This is extremely efficient.
+  if (repos.length > 0) {
+    await inngest.send(
+      repos.map(repo => ({
+        name: "repo.delete",
+        data: {
+          repoId: repo.githubId.toString()
+        }
+      }))
+    );
+  }
+
+  // 3. Batch Delete from DB
   await prisma.repository.deleteMany({
     where: { userId: session.user.id },
   });
