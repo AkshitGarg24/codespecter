@@ -30,18 +30,48 @@ export interface CodeChunk {
   };
 }
 
+function splitByLength(code: string, maxLen: number = 8000): CodeChunk[] {
+  const chunks: CodeChunk[] = [];
+  const lines = code.split('\n');
+  let currentChunk = '';
+  let startLine = 1;
+  let currentLine = 1;
+
+  for (const line of lines) {
+    if ((currentChunk.length + line.length) > maxLen) {
+      chunks.push({
+        content: currentChunk,
+        metadata: { lineStart: startLine, lineEnd: currentLine - 1, type: 'block' }
+      });
+      currentChunk = '';
+      startLine = currentLine;
+    }
+    currentChunk += line + '\n';
+    currentLine++;
+  }
+
+  // Push remaining
+  if (currentChunk.trim()) {
+    chunks.push({
+      content: currentChunk,
+      metadata: { lineStart: startLine, lineEnd: currentLine, type: 'block' }
+    });
+  }
+
+  return chunks;
+}
+
 export async function chunkCode(code: string, filename: string): Promise<CodeChunk[]> {
   try {
     await initParser();
   } catch (e) {
-    // Fail safe: If parser crashes, return the whole file as one block
-    return [{ content: code, metadata: { lineStart: 1, lineEnd: code.split('\n').length, type: 'block' } }];
+    // 🔥 FIX: Use splitter instead of returning whole file
+    return splitByLength(code);
   }
 
   const parser = new Parser();
 
   // 1. Detect Language
-  // We added JS/JSX support here so you don't miss frontend logic
   let lang = '';
   if (filename.endsWith('.ts')) lang = 'typescript';
   else if (filename.endsWith('.tsx')) lang = 'tsx';
@@ -50,22 +80,19 @@ export async function chunkCode(code: string, filename: string): Promise<CodeChu
   else if (filename.endsWith('.go')) lang = 'go';
   else if (filename.endsWith('.java')) lang = 'java';
 
-  // If unsupported language (e.g. CSS, JSON), return whole file
+  // 🔥 FIX: If language unsupported, split by length
   if (!lang) {
-      parser.delete();
-      return [{ content: code, metadata: { lineStart: 1, lineEnd: code.split('\n').length, type: 'block' } }];
+     parser.delete();
+     return splitByLength(code);
   }
 
   // 2. Load Grammar
   const wasmPath = path.join(process.cwd(), 'public', 'grammars', `tree-sitter-${lang}.wasm`);
 
   if (!fs.existsSync(wasmPath)) {
-    console.warn(`⚠️ Grammar missing for ${lang}, skipping smart parse.`);
+    console.warn(`⚠️ Grammar missing for ${lang}, using simple split.`);
     parser.delete();
-    return [{ 
-        content: code, 
-        metadata: { lineStart: 1, lineEnd: code.split('\n').length, type: 'block' } 
-    }];
+    return splitByLength(code);
   }
 
   const language = await Language.load(wasmPath);
@@ -74,11 +101,10 @@ export async function chunkCode(code: string, filename: string): Promise<CodeChu
   // 3. Parse
   const tree = parser.parse(code);
   
-  // Safety check for null tree
   if (!tree) {
     console.error(`Failed to parse ${filename}`);
     parser.delete();
-    return [{ content: code, metadata: { lineStart: 1, lineEnd: code.split('\n').length, type: 'block' } }];
+    return splitByLength(code);
   }
 
   const chunks: CodeChunk[] = [];
@@ -169,7 +195,7 @@ export async function chunkCode(code: string, filename: string): Promise<CodeChu
   parser.delete();
 
   if (chunks.length === 0) {
-      return [{ content: code, metadata: { lineStart: 1, lineEnd: code.split('\n').length, type: 'block' } }];
+      return splitByLength(code);
   }
 
   return chunks;

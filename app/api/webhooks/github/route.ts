@@ -54,19 +54,22 @@ export async function POST(req: Request) {
     if (eventType === 'pull_request') {
       const { action, pull_request, repository } = payload;
 
-      // We also check "opened" and "synchronize" (updates to PR)
+      // We check "opened" and "synchronize" (updates to PR)
       if (action === 'opened' || action === 'synchronize') {
         console.log(
           `Triggering AI for PR #${pull_request.number} in ${repository.full_name}`
         );
 
         await inngest.send({
-          name: 'pr.review', // Must match the event name in review-pr.ts
+          name: 'pr.review', 
           data: {
             repoId: repository.id, // Needed for DB lookup
             prNumber: pull_request.number,
             owner: repository.owner.login,
             repo: repository.name,
+            // 🔥 ADDED: Pass Title & Description for Context Retrieval
+            title: pull_request.title, 
+            description: pull_request.body || "" // GitHub sends description as 'body'
           },
         });
       }
