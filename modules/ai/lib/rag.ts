@@ -90,3 +90,53 @@ export async function retrieveContext(query: string, repoId: string) {
     .map((match) => match.metadata?.content as string)
     .filter(Boolean);
 }
+
+/**
+ * Processes raw file content into Vector objects
+ * Does NOT upsert. Just prepares the data.
+ */
+export async function embedCode(
+  content: string,
+  filePath: string,
+  repoId: string
+) {
+  const vectors = [];
+
+  try {
+    // 1. Chunk the code using Tree-Sitter logic
+    const chunks = await chunkCode(content, filePath);
+
+    for (const chunk of chunks) {
+      // 2. Prepare Contextual Content
+      const embeddingContent = `File: ${filePath}\nType: ${chunk.metadata.type}\nLines: ${chunk.metadata.lineStart}-${chunk.metadata.lineEnd}\n\n${chunk.content}`;
+
+      const embedding = await generateEmbeddings(embeddingContent);
+
+      // 3. Safety Truncation (Pinecone 40KB Limit)
+      const MAX_METADATA_SIZE = 30000;
+      let safeContent = chunk.content;
+      if (Buffer.byteLength(safeContent, 'utf8') > MAX_METADATA_SIZE) {
+        safeContent =
+          safeContent.slice(0, MAX_METADATA_SIZE) + '...[TRUNCATED]';
+      }
+
+      // 4. Create Vector Object
+      vectors.push({
+        id: `${repoId}-${filePath.replace(/[^a-zA-Z0-9-_]/g, '_')}-${chunk.metadata.lineStart}`,
+        values: embedding,
+        metadata: {
+          repoId,
+          path: filePath,
+          content: safeContent,
+          lineStart: chunk.metadata.lineStart,
+          lineEnd: chunk.metadata.lineEnd,
+          type: chunk.metadata.type,
+        },
+      });
+    }
+  } catch (error) {
+    console.error(`Failed to chunk/embed ${filePath}`, error);
+  }
+
+  return vectors;
+}

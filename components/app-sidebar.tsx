@@ -59,21 +59,21 @@ const AppSidebar = () => {
       url: '/dashboard/repository',
       icon: Github,
     },
-    {
-      title: 'Reviews',
-      url: '/dashboard/reviews',
-      icon: Star,
-    },
-    {
-      title: 'Subscription',
-      url: '/dashboard/subscription',
-      icon: Repeat,
-    },
-    {
-      title: 'Settings',
-      url: '/dashboard/settings',
-      icon: Settings,
-    },
+    // {
+    //   title: 'Reviews',
+    //   url: '/dashboard/reviews',
+    //   icon: Star,
+    // },
+    // {
+    //   title: 'Subscription',
+    //   url: '/dashboard/subscription',
+    //   icon: Repeat,
+    // },
+    // {
+    //   title: 'Settings',
+    //   url: '/dashboard/settings',
+    //   icon: Settings,
+    // },
   ];
 
   const isActive = (url: string) => {

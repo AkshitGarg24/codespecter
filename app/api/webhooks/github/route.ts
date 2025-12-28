@@ -59,7 +59,7 @@ export async function POST(req: Request) {
         console.log(`🚀 PR Event: #${pull_request.number} ${action}`);
 
         await inngest.send({
-          name: 'pr.review', 
+          name: 'pr.review',
           data: {
             repoId: repository.id,
             prNumber: pull_request.number,
@@ -83,9 +83,9 @@ export async function POST(req: Request) {
 
       // ✅ Filter 1: Only care about new comments
       if (action === 'created') {
-        // ✅ Filter 2: Check for @codespecter mention early (Optional, saves Inngest calls)
+        // ✅ Filter 2: Check for @codespecter-ai-review mention early (Optional, saves Inngest calls)
         // You can remove this if you want Inngest to handle the filtering
-        const isMentioned = comment.body.toLowerCase().includes('@codespecter');
+        const isMentioned = comment.body.toLowerCase().includes('@codespecter-ai-review');
         if (!isMentioned) {
           console.log('Ignored comment: Bot not mentioned.');
           return NextResponse.json({ message: 'Ignored' });
@@ -122,6 +122,21 @@ export async function POST(req: Request) {
             repoId: repository.id,
             isBot: comment.user.type === 'Bot',
           },
+        });
+      }
+    } else if (eventType === 'push') {
+      const { ref, repository } = payload;
+      const defaultBranch = `refs/heads/${repository.default_branch}`;
+
+      // Only index pushes to the main branch
+      if (ref === defaultBranch) {
+        console.log(
+          `📡 Push detected on ${repository.full_name}, triggering index update...`
+        );
+
+        await inngest.send({
+          name: 'github/push', // Matches the event name in index-changes.ts
+          data: payload, // Send the whole payload so index-changes can find 'commits'
         });
       }
     }

@@ -24,7 +24,7 @@ const GitHubStats = ({ initialData }: { initialData: DashboardStats }) => {
     {
       title: 'Total Repositories',
       value: data.totalRepos,
-      description: 'Connected Repositories',
+      description: 'in your GitHub Account',
       icon: GitBranch,
     },
     {
@@ -39,18 +39,12 @@ const GitHubStats = ({ initialData }: { initialData: DashboardStats }) => {
       description: 'in the last year',
       icon: GitPullRequest,
     },
-    {
-      title: 'AI Reviews',
-      value: '12',
-      description: 'Generated this week',
-      icon: Bot,
-    },
   ];
 
   return (
     <>
       <div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-3">
           {stats.map((stat, index) => (
             <Card key={index} className="hover:bg-muted/50 transition-colors">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -71,31 +65,8 @@ const GitHubStats = ({ initialData }: { initialData: DashboardStats }) => {
           ))}
         </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+      <div>
         <ActivityGraph data={initialData.monthlyActivity} />
-        <Card className="col-span-3">
-          <CardHeader>
-            <CardTitle>Recent Reviews</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center">
-                <Bot className="mr-2 h-4 w-4 text-blue-500" />
-                <div className="ml-4 space-y-1">
-                  <p className="text-sm font-medium leading-none">
-                    fix: auth-middleware
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Suggested optimization
-                  </p>
-                </div>
-                <div className="ml-auto font-medium text-xs text-green-500">
-                  +2% perf
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </>
   );
