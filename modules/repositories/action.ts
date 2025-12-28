@@ -40,9 +40,9 @@ export async function getRepositoriesAction(
       isConnected: true, // Always true in this view
       primaryLanguage: repo.primaryLanguage
         ? {
-          name: repo.primaryLanguage,
-          color: repo.languageColor || '#ccc',
-        }
+            name: repo.primaryLanguage,
+            color: repo.languageColor || '#ccc',
+          }
         : null,
     }));
 
@@ -98,13 +98,13 @@ export async function connectRepositoryAction(repoData: RepoListNode) {
     webhookId = await createWebHook(token, owner, repo);
 
     await inngest.send({
-      name: "repository.indexing",
+      name: 'repository.indexing',
       data: {
         owner,
         repo,
         userId: session.user.id,
-        repoId: repoData.databaseId
-      }
+        repoId: repoData.databaseId,
+      },
     });
 
     await prisma.repository.create({
@@ -150,21 +150,26 @@ export async function disconnectRepositoryAction(repoId: number) {
     if (repo.webhookId) {
       // We wrap this in a try-catch so one API failure doesn't stop the DB deletion
       try {
-        await deleteWebHook(token, repo.owner, repo.name, Number(repo.webhookId));
+        await deleteWebHook(
+          token,
+          repo.owner,
+          repo.name,
+          Number(repo.webhookId)
+        );
       } catch (e) {
-        console.error("Failed to delete webhook from GitHub", e);
+        console.error('Failed to delete webhook from GitHub', e);
         // Continue execution...
       }
     }
 
     // 2. Trigger Background Vector Cleanup (Inngest)
-    // We fire this BEFORE deleting from DB to ensure we have the ID, 
+    // We fire this BEFORE deleting from DB to ensure we have the ID,
     // but Inngest is async so it won't block.
     await inngest.send({
-      name: "repo.delete",
+      name: 'repo.delete',
       data: {
-        repoId: repoId.toString() // Convert BigInt/Number to string for JSON
-      }
+        repoId: repoId.toString(), // Convert BigInt/Number to string for JSON
+      },
     });
 
     // 3. Delete from Database
@@ -173,7 +178,7 @@ export async function disconnectRepositoryAction(repoId: number) {
     revalidatePath('/dashboard');
     return { success: true };
   } catch (error) {
-    console.error("Disconnect Error:", error);
+    console.error('Disconnect Error:', error);
     return { error: 'Failed to disconnect' };
   }
 }
@@ -208,11 +213,11 @@ export async function disconnectAllRepositoriesAction() {
   // This is extremely efficient.
   if (repos.length > 0) {
     await inngest.send(
-      repos.map(repo => ({
-        name: "repo.delete",
+      repos.map((repo) => ({
+        name: 'repo.delete',
         data: {
-          repoId: repo.githubId.toString()
-        }
+          repoId: repo.githubId.toString(),
+        },
       }))
     );
   }

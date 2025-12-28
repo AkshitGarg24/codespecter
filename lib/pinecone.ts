@@ -1,7 +1,7 @@
-import { Pinecone } from "@pinecone-database/pinecone";
+import { Pinecone } from '@pinecone-database/pinecone';
 
 export const pinecone = new Pinecone({
-    apiKey: process.env.PINECONE_DB_API_KEY!
-})
+  apiKey: process.env.PINECONE_DB_API_KEY!,
+});
 
-export const pineconeIndex = pinecone.index("codespecter-vector-embeddings-v1");
+export const pineconeIndex = pinecone.index('codespecter-vector-embeddings-v1');
