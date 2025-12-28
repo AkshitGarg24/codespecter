@@ -103,7 +103,7 @@ export const reviewPr = inngest.createFunction(
         return collectedGuidelines;
       } catch (error) {
         console.error('Failed to fetch guidelines', error);
-        return ''; 
+        return '';
       }
     });
 
@@ -111,10 +111,21 @@ export const reviewPr = inngest.createFunction(
     // STEP 4: RAG Context ("The Knowledge")
     // -------------------------------------------------------
     const contextSnippets = await step.run('fetch-rag-context', async () => {
-      // Use the first file's patch as a sample query if available, otherwise just title
-      const patchSample = prData[0]?.patch?.slice(0, 300) || '';
-      const query = `PR Context: ${title} ${description}. Code: ${patchSample}`;
+      const allPatchesSummary = prData
+        .map((f) => `File: ${f.filename}\n${f.patch || ''}`) // Add filename context
+        .filter((text) => text.length < 10000) // Skip massive generated files if any slipped through
+        .join('\n\n')
+        .slice(0, 4000); // Increased limit to ~1000 tokens for better context retrieval
+
+      // Put Title/Description FIRST as they contain the strongest semantic intent
+      const query = `
+      PR Title: ${title}
+      PR Description: ${description}
       
+      Code Changes Summary:
+      ${allPatchesSummary}
+    `.trim();
+
       const matches = await retrieveContext(query, repoId.toString());
       return matches.join('\n\n');
     });
@@ -132,8 +143,8 @@ export const reviewPr = inngest.createFunction(
       const detailedPrompt = generateReviewPrompt(
         title,
         description,
-        projectGuidelines, 
-        contextSnippets, 
+        projectGuidelines,
+        contextSnippets,
         prDataJSON
       );
 
