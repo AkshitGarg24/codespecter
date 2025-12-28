@@ -7,6 +7,8 @@ import { Octokit } from 'octokit';
 import prisma from '@/lib/db';
 import { retrieveContext } from '@/modules/ai/lib/rag';
 import { generateReviewPrompt } from '@/modules/ai/lib/review-pr-prompt';
+import { fetchProjectConfig } from '@/modules/config/fetch-config';
+import { minimatch } from 'minimatch';
 
 export const reviewPr = inngest.createFunction(
   {
@@ -36,6 +38,10 @@ export const reviewPr = inngest.createFunction(
 
     const octokit = new Octokit({ auth: token });
 
+    const config = await step.run('fetch-config', async () => {
+      return await fetchProjectConfig(octokit, owner, repo);
+    });
+
     // -------------------------------------------------------
     // STEP 2: Fetch Diff
     // -------------------------------------------------------
@@ -49,6 +55,22 @@ export const reviewPr = inngest.createFunction(
         }
       );
 
+      const defaultIgnores = [
+        'package-lock.json',
+        'yarn.lock',
+        'pnpm-lock.yaml',
+        '**/*.min.js',
+        '**/*.min.css',
+        '**/*.svg',
+        '**/*.png',
+        '**/*.jpg',
+        '**/*.map',
+      ];
+
+      // Merge with User Config ignores
+      const userIgnores = config?.review?.ignore || [];
+      const allIgnorePatterns = [...defaultIgnores, ...userIgnores];
+
       return data
         .map((f) => ({
           filename: f.filename,
@@ -56,13 +78,15 @@ export const reviewPr = inngest.createFunction(
           status: f.status,
         }))
         .filter((file) => {
-          return (
-            !file.filename.match(
-              /\.(lock|min\.js|min\.css|svg|png|jpg|json|map|md)$/
-            ) &&
-            !file.filename.includes('package-lock.json') &&
-            file.status !== 'removed'
+          // 1. Check if file is removed
+          if (file.status === 'removed') return false;
+
+          // 2. Check against ALL ignore patterns using minimatch
+          const isIgnored = allIgnorePatterns.some((pattern) =>
+            minimatch(file.filename, pattern, { dot: true })
           );
+
+          return !isIgnored;
         });
     });
 
@@ -145,7 +169,8 @@ export const reviewPr = inngest.createFunction(
         description,
         projectGuidelines,
         contextSnippets,
-        prDataJSON
+        prDataJSON,
+        config
       );
 
       // 3. Run Generation
