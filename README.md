@@ -18,6 +18,48 @@ Built with **Next.js** and **Inngest** for reliable, multi-step background proce
 
 ---
 
+## 🏗 Repository Connection & Indexing Flow
+This flow illustrates how CodeSpecter processes a repository from the initial click to a fully indexed RAG (Retrieval-Augmented Generation) state.
+```mermaid
+graph TD
+    subgraph "Frontend"
+        A[User Clicks 'Connect <br/>Repository'] --> C[Call API: <br/>/api/repositories/connect]
+    end
+
+    subgraph "Backend Orchestration (Inngest)"
+        C --> D[Inngest Event: <br/>'repository.indexing']
+        D --> E(Function: index-repo.ts)
+    end
+
+    subgraph "Indexing Pipeline"
+        E --> F[Step 1: Clone/Fetch Code]
+        F --> G[Step 2: File Discovery]
+        G -->|Filter: .js, .ts, .py, .go, etc.| H[Step 3: Structural Parsing]
+        
+        subgraph "Tree-Sitter Processing"
+            H --> I[Tree-Sitter Parser]
+            I --> J[Extract Symbols: <br/>Classes, Functions, Methods]
+            J --> K[Generate Code <br/>Snippets/Chunks]
+        end
+
+        K --> L[Step 4: Embedding<br/> Generation]
+        L --> M{{Google Gemini/<br/>Text-Embedding API}}
+        M -- Vector Vectors --> N[(Vector DB - Pinecone)]
+    end
+
+    subgraph "Finalization"
+        N --> O[Step 5: Create Webhook]
+        O --> P["Octokit: POST <br/>/repos/{owner}/{repo}/hooks"]
+    end
+
+    style I fill:#f39c12,color:#fff
+    style J fill:#f39c12,color:#fff
+    style N fill:#00bb7a,color:#fff
+    style M fill:#4285F4,color:#fff
+```
+
+---
+
 ## 🔄 Architecture Flow
 
 This diagram illustrates how a GitHub event travels through the system to generate an AI review.
