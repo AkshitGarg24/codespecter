@@ -150,7 +150,7 @@ export const reviewPr = inngest.createFunction(
 
       // 3. Run Generation
       const { text } = await generateText({
-        model: google('gemini-1.5-flash'), // Updated to valid model version
+        model: google('gemini-2.5-flash'), // Updated to valid model version
         prompt: detailedPrompt,
         temperature: 0.2,
       });
