@@ -2,17 +2,17 @@
 
 import { inngest } from '../client';
 import { google } from '@ai-sdk/google';
-import { generateText } from 'ai'; 
+import { generateText } from 'ai';
 import { Octokit } from 'octokit';
 import prisma from '@/lib/db';
 import { retrieveContext } from '@/modules/ai/lib/rag';
 import { generateReviewPrompt } from '@/modules/ai/lib/review-pr-prompt';
 
 export const reviewPr = inngest.createFunction(
-  { 
-    id: 'review-pr', 
+  {
+    id: 'review-pr',
     concurrency: 4,
-    retries: 2
+    retries: 2,
   },
   { event: 'pr.review' },
   async ({ event, step }) => {
@@ -26,7 +26,9 @@ export const reviewPr = inngest.createFunction(
         include: { user: { include: { accounts: true } } },
       });
       if (!repository) throw new Error('Repository not connected');
-      const account = repository.user.accounts.find(a => a.providerId === 'github');
+      const account = repository.user.accounts.find(
+        (a) => a.providerId === 'github'
+      );
       if (!account?.accessToken) throw new Error('No GitHub token found');
       return account.accessToken;
     });
@@ -36,19 +38,30 @@ export const reviewPr = inngest.createFunction(
     // ... (Step 2: Fetch Diff remains the same) ...
     const prData = await step.run('fetch-diff', async () => {
       // ... same implementation ...
-        const { data } = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}/files', {
-        owner, repo, pull_number: prNumber,
-      });
+      const { data } = await octokit.request(
+        'GET /repos/{owner}/{repo}/pulls/{pull_number}/files',
+        {
+          owner,
+          repo,
+          pull_number: prNumber,
+        }
+      );
 
-      return data.map(f => ({
-        filename: f.filename,
-        patch: f.patch || '',
-        status: f.status
-      })).filter(file => {
-        return !file.filename.match(/\.(lock|min\.js|min\.css|svg|png|jpg|json|map|md)$/) &&
-               !file.filename.includes('package-lock.json') &&
-               file.status !== 'removed';
-      });
+      return data
+        .map((f) => ({
+          filename: f.filename,
+          patch: f.patch || '',
+          status: f.status,
+        }))
+        .filter((file) => {
+          return (
+            !file.filename.match(
+              /\.(lock|min\.js|min\.css|svg|png|jpg|json|map|md)$/
+            ) &&
+            !file.filename.includes('package-lock.json') &&
+            file.status !== 'removed'
+          );
+        });
     });
 
     if (prData.length === 0) return { message: 'No reviewable files found.' };
@@ -57,49 +70,51 @@ export const reviewPr = inngest.createFunction(
     // STEP 3: Fetch Guidelines ("The Law")
     // -------------------------------------------------------
     const projectGuidelines = await step.run('fetch-guidelines', async () => {
-        try {
-            // Strategy: Look for specific guideline files or a folder.
-            // Adjust this array to match your project structure
-            const criticalFiles = [
-                'BIGGER_PICTURE.md',
-                'guidelines/03-api-development-standards.md',
-                'guidelines/12-security-hardening.md'
-            ];
+      try {
+        // Strategy: Look for specific guideline files or a folder.
+        // Adjust this array to match your project structure
+        const criticalFiles = [
+          'BIGGER_PICTURE.md',
+          'guidelines/03-api-development-standards.md',
+          'guidelines/12-security-hardening.md',
+        ];
 
-            let collectedGuidelines = '';
+        let collectedGuidelines = '';
 
-            for (const path of criticalFiles) {
-                try {
-                    const { data } = await octokit.rest.repos.getContent({
-                        owner,
-                        repo,
-                        path,
-                    });
+        for (const path of criticalFiles) {
+          try {
+            const { data } = await octokit.rest.repos.getContent({
+              owner,
+              repo,
+              path,
+            });
 
-                    if ('content' in data && !Array.isArray(data)) {
-                        const content = Buffer.from(data.content, 'base64').toString('utf-8');
-                        collectedGuidelines += `\n\n--- FILE: ${path} ---\n${content}`;
-                    }
-                } catch (e) {
-                    // Ignore missing files, proceed to next
-                    console.warn(`Guideline file not found: ${path}`);
-                }
+            if ('content' in data && !Array.isArray(data)) {
+              const content = Buffer.from(data.content, 'base64').toString(
+                'utf-8'
+              );
+              collectedGuidelines += `\n\n--- FILE: ${path} ---\n${content}`;
             }
-            
-            return collectedGuidelines;
-        } catch (error) {
-            console.error("Failed to fetch guidelines", error);
-            return ""; // Fail safe: return empty string so prompt uses "Best Practices"
+          } catch (e) {
+            // Ignore missing files, proceed to next
+            console.warn(`Guideline file not found: ${path}`);
+          }
         }
+
+        return collectedGuidelines;
+      } catch (error) {
+        console.error('Failed to fetch guidelines', error);
+        return ''; // Fail safe: return empty string so prompt uses "Best Practices"
+      }
     });
 
     // -------------------------------------------------------
     // STEP 4: RAG Context ("The Knowledge")
     // -------------------------------------------------------
     const contextSnippets = await step.run('fetch-rag-context', async () => {
-        const query = `PR Context: ${title} ${description}. Code: ${prData[0].patch.slice(0, 300)}`;
-        const matches = await retrieveContext(query, repoId.toString());
-        return matches.join('\n\n');
+      const query = `PR Context: ${title} ${description}. Code: ${prData[0].patch.slice(0, 300)}`;
+      const matches = await retrieveContext(query, repoId.toString());
+      return matches.join('\n\n');
     });
 
     // -------------------------------------------------------
@@ -107,15 +122,17 @@ export const reviewPr = inngest.createFunction(
     // -------------------------------------------------------
     const aiReviewText = await step.run('analyze-code', async () => {
       // 1. Prepare Data
-      const prDataJSON = JSON.stringify(prData.map(f => ({ name: f.filename, diff: f.patch })));
-      
+      const prDataJSON = JSON.stringify(
+        prData.map((f) => ({ name: f.filename, diff: f.patch }))
+      );
+
       // 2. Load the System Prompt with BOTH Contexts
       const detailedPrompt = generateReviewPrompt(
-          title, 
-          description, 
-          projectGuidelines, // Passed here
-          contextSnippets,   // Passed here
-          prDataJSON
+        title,
+        description,
+        projectGuidelines, // Passed here
+        contextSnippets, // Passed here
+        prDataJSON
       );
 
       // 3. Run Generation
@@ -130,12 +147,12 @@ export const reviewPr = inngest.createFunction(
 
     // ... (Step 6: Post Result remains the same) ...
     await step.run('post-results', async () => {
-        await octokit.rest.issues.createComment({
-            owner,
-            repo,
-            issue_number: prNumber,
-            body: aiReviewText
-        });
+      await octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: prNumber,
+        body: aiReviewText,
+      });
     });
 
     return { success: true };

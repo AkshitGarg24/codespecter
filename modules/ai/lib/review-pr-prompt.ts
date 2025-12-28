@@ -2,7 +2,7 @@ export const generateReviewPrompt = (
   title: string,
   description: string,
   projectGuidelines: string, // Content from .md files (The Law)
-  ragContext: string,        // Content from Vector Search (The Knowledge)
+  ragContext: string, // Content from Vector Search (The Knowledge)
   prDataJSON: string
 ) => `
 You are **CodeSpecter**, a Principal Software Engineer acting as the repository's gatekeeper.
@@ -15,10 +15,11 @@ If you identify a **Security Vulnerability** (SQL Injection, IDOR, exposed secre
 ## 1️⃣ CONTEXT & GUIDELINES
 
 **👉 STATUS OF REPOSITORY GUIDELINES:**
-${projectGuidelines ? "✅ **Repository-Specific Guidelines PROVIDED.**" : "❌ **NO Repository-Specific Guidelines.**"}
+${projectGuidelines ? '✅ **Repository-Specific Guidelines PROVIDED.**' : '❌ **NO Repository-Specific Guidelines.**'}
 
 **THE LAW (MANDATORY COMPLIANCE):**
-${projectGuidelines
+${
+  projectGuidelines
     ? `You MUST enforce the following project-specific rules STRICTLY.
     <REPOSITORY_GUIDELINES>
     ${projectGuidelines}

@@ -16,7 +16,13 @@ export async function createWebHook(
       repo,
       name: 'web',
       active: true,
-      events: ['pull_request', 'push'],
+      events: [
+        'pull_request',
+        'push',
+        'pull_request_review', // Triggers when a Review is submitted (Approve/Reject)
+        'pull_request_review_comment', // Triggers on code-specific comments
+        'issue_comment',
+      ],
       config: {
         url: webHookURL,
         content_type: 'json',
