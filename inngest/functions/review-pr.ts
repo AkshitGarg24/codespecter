@@ -18,9 +18,10 @@ export const reviewPr = inngest.createFunction(
   async ({ event, step }) => {
     const { owner, repo, prNumber, repoId, title, description } = event.data;
 
-    // ... (Step 1: Fetch Token remains the same) ...
+    // -------------------------------------------------------
+    // STEP 1: Fetch Token
+    // -------------------------------------------------------
     const token = await step.run('fetch-token', async () => {
-      // ... same implementation ...
       const repository = await prisma.repository.findUnique({
         where: { githubId: repoId },
         include: { user: { include: { accounts: true } } },
@@ -35,9 +36,10 @@ export const reviewPr = inngest.createFunction(
 
     const octokit = new Octokit({ auth: token });
 
-    // ... (Step 2: Fetch Diff remains the same) ...
+    // -------------------------------------------------------
+    // STEP 2: Fetch Diff
+    // -------------------------------------------------------
     const prData = await step.run('fetch-diff', async () => {
-      // ... same implementation ...
       const { data } = await octokit.request(
         'GET /repos/{owner}/{repo}/pulls/{pull_number}/files',
         {
@@ -71,8 +73,6 @@ export const reviewPr = inngest.createFunction(
     // -------------------------------------------------------
     const projectGuidelines = await step.run('fetch-guidelines', async () => {
       try {
-        // Strategy: Look for specific guideline files or a folder.
-        // Adjust this array to match your project structure
         const criticalFiles = [
           'BIGGER_PICTURE.md',
           'guidelines/03-api-development-standards.md',
@@ -96,7 +96,6 @@ export const reviewPr = inngest.createFunction(
               collectedGuidelines += `\n\n--- FILE: ${path} ---\n${content}`;
             }
           } catch (e) {
-            // Ignore missing files, proceed to next
             console.warn(`Guideline file not found: ${path}`);
           }
         }
@@ -104,7 +103,7 @@ export const reviewPr = inngest.createFunction(
         return collectedGuidelines;
       } catch (error) {
         console.error('Failed to fetch guidelines', error);
-        return ''; // Fail safe: return empty string so prompt uses "Best Practices"
+        return ''; 
       }
     });
 
@@ -112,7 +111,10 @@ export const reviewPr = inngest.createFunction(
     // STEP 4: RAG Context ("The Knowledge")
     // -------------------------------------------------------
     const contextSnippets = await step.run('fetch-rag-context', async () => {
-      const query = `PR Context: ${title} ${description}. Code: ${prData[0].patch.slice(0, 300)}`;
+      // Use the first file's patch as a sample query if available, otherwise just title
+      const patchSample = prData[0]?.patch?.slice(0, 300) || '';
+      const query = `PR Context: ${title} ${description}. Code: ${patchSample}`;
+      
       const matches = await retrieveContext(query, repoId.toString());
       return matches.join('\n\n');
     });
@@ -126,18 +128,18 @@ export const reviewPr = inngest.createFunction(
         prData.map((f) => ({ name: f.filename, diff: f.patch }))
       );
 
-      // 2. Load the System Prompt with BOTH Contexts
+      // 2. Load the System Prompt
       const detailedPrompt = generateReviewPrompt(
         title,
         description,
-        projectGuidelines, // Passed here
-        contextSnippets, // Passed here
+        projectGuidelines, 
+        contextSnippets, 
         prDataJSON
       );
 
       // 3. Run Generation
       const { text } = await generateText({
-        model: google('gemini-2.5-flash'), // Using Pro for complex reasoning
+        model: google('gemini-1.5-flash'), // Updated to valid model version
         prompt: detailedPrompt,
         temperature: 0.2,
       });
@@ -145,7 +147,9 @@ export const reviewPr = inngest.createFunction(
       return text;
     });
 
-    // ... (Step 6: Post Result remains the same) ...
+    // -------------------------------------------------------
+    // STEP 6: Post Result
+    // -------------------------------------------------------
     await step.run('post-results', async () => {
       await octokit.rest.issues.createComment({
         owner,

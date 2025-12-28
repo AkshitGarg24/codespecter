@@ -121,7 +121,6 @@ export async function chunkCode(
 
   // 3. Parse
   const tree = parser.parse(code);
-
   if (!tree) {
     console.error(`Failed to parse ${filename}`);
     parser.delete();

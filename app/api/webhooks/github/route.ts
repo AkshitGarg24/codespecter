@@ -54,11 +54,12 @@ export async function POST(req: Request) {
     if (eventType === 'pull_request') {
       const { action, pull_request, repository } = payload;
 
+      // We check "opened" and "synchronize" (updates to PR)
       if (action === 'opened' || action === 'synchronize') {
         console.log(`🚀 PR Event: #${pull_request.number} ${action}`);
 
         await inngest.send({
-          name: 'pr.review',
+          name: 'pr.review', 
           data: {
             repoId: repository.id,
             prNumber: pull_request.number,
