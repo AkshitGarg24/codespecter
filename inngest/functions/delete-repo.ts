@@ -4,6 +4,7 @@ import { pineconeIndex } from '@/lib/pinecone';
 export const deleteRepo = inngest.createFunction(
   {
     id: 'delete-repo',
+    concurrency: 5,
     retries: 5, // Allow up to 5 automatic retries if Pinecone is slow
   },
   { event: 'repo.delete' },

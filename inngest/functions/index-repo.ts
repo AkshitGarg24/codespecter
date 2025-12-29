@@ -7,7 +7,7 @@ import { indexCodebase } from '@/modules/ai/lib/rag';
 import prisma from '@/lib/db';
 
 export const indexRepo = inngest.createFunction(
-  { id: 'index-repo', concurrency: 1 },
+  { id: 'index-repo', concurrency: 5 },
   { event: 'repository.indexing' },
   async ({ event, step }) => {
     const { owner, repo, repoId, userId } = event.data;

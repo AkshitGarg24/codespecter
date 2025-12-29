@@ -8,7 +8,7 @@ import { generateChatPrompt } from '@/modules/ai/lib/pr-chat-prompt';
 import { fetchProjectConfig } from '@/modules/config/fetch-config';
 
 export const answerPrComment = inngest.createFunction(
-  { id: 'answer-pr-comment', concurrency: 10 },
+  { id: 'answer-pr-comment', concurrency: 5 },
   { event: 'pr.comment' },
   async ({ event, step }) => {
     const { owner, repo, commentId, body, prNumber, repoId, isBot } = event.data;

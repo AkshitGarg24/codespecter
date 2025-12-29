@@ -13,7 +13,7 @@ import { minimatch } from 'minimatch';
 export const reviewPr = inngest.createFunction(
   {
     id: 'review-pr',
-    concurrency: 4,
+    concurrency: 5,
     retries: 2,
   },
   { event: 'pr.review' },
