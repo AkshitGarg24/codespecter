@@ -19,18 +19,20 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v4
 
-      # 2. Setup Node.js environment
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      # 2. Setup Bun environment
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          node-version: 18
+          bun-version: latest
 
-      # 3. Install dependencies (Clean install)
+      # 3. Install dependencies
+      # --frozen-lockfile ensures it strictly follows your bun.lockb (like npm ci)
       - name: Install Dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       # 4. Apply the Migration
+      # We use 'bunx' (Bun's executor) instead of npx
       - name: Run Prisma Migrate Deploy
-        run: npx prisma migrate deploy
+        run: bunx prisma migrate deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
