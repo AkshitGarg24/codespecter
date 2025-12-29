@@ -1,0 +1,36 @@
+name: Production Database Migration
+
+# Trigger this action ONLY when code is pushed/merged to the 'main' branch
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'prisma/migrations/**' # Only run if migration files actually changed
+      - 'prisma/schema.prisma' # Or if the schema changed
+
+jobs:
+  deploy-migrations:
+    name: Apply Migrations to Production
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Check out the code
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      # 2. Setup Node.js environment
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      # 3. Install dependencies (Clean install)
+      - name: Install Dependencies
+        run: bun ci
+
+      # 4. Apply the Migration
+      - name: Run Prisma Migrate Deploy
+        run: bun x prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

@@ -6,7 +6,8 @@ const nextConfig: NextConfig = {
       // 1. Allow the ngrok domain to trigger Server Actions
       allowedOrigins: [
         'localhost:3000',
-        'noncadenced-zachery-phalangeal.ngrok-free.dev', // 👈 Copy your EXACT ngrok domain here
+        'noncadenced-zachery-phalangeal.ngrok-free.dev',
+        'codespecter.vercel.app'
       ],
     },
   },
