@@ -6,6 +6,12 @@ import {
 } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
 import AppSidebar from '@/components/app-sidebar';
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Dashboard - CodeSpecter',
+  description: 'An intelligent automation bot that provides instant, contextual feedback on GitHub Pull Requests.',
+};
 
 const DashboardLayout = async ({ children }: { children: React.ReactNode }) => {
   await requireAuth();
