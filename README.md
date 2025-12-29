@@ -201,7 +201,7 @@ graph TD
 ---
 
 ### 2. Google AI Studio
-- Generate an **API key** for **Gemini 1.5 Flash**
+- Generate an **API key** for **Gemini 2.5 Flash**
 
 ---
 
