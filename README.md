@@ -121,7 +121,7 @@ graph TD
 
 ## 💬 Interactive Comment Flow
 CodeSpecter can respond interactively when explicitly mentioned in a PR comment
-(e.g. @codespecter handle this).
+(e.g. @codespecter-ai-review handle this).
 
 ```mermaid
 graph TD
@@ -130,7 +130,7 @@ graph TD
         B["Webhook event:<br/>'issue_comment'<br/>OR<br/>'pull_request_review_comment'"]
         L["Bot Reply<br/>appears in Thread"]
 
-        A -->|Body contains:<br/>'@codespecter'| B
+        A -->|Body contains:<br/>'@codespecter-ai-review'| B
     end
 
     subgraph "Next.js Webhook Handler"
@@ -166,7 +166,7 @@ graph TD
         R1 -- "Query Codebase Knowledge" --> R2
         R2 -- "Contextual Code Snippets" --> R1
         R1 --> I
-        I -- "Conversation + Diffs + RAG Context" --> J
+        I -- "Conversation + Diffs + <br/>RAG Context" --> J
         J -- "Generated Insightful Reply" --> I
         I --> K --> M
     end
@@ -178,7 +178,66 @@ graph TD
     style B fill:#823417,stroke:#333
     style L fill:#17822b,stroke:#fff,stroke-width:2px
     style R2 fill:#116e96,color:#fff
+```
 
+---
+
+## ⚙️ Configuration
+
+CodeSpecter is fully customizable. You can control the AI's behavior, tone, and strictness by adding a configuration file to your repository.
+### File Location
+Create a file named `CODESPECTER.yml` in one of the following locations:
+- Root Directory: `./CODESPECTER.yml`
+- GitHub Folder: `./.github/CODESPECTER.yml`
+
+### Configuration Schema
+The configuration follows this structure:
+
+```typescript
+export interface CodeSpecterConfig {
+  review?: {
+    enabled?: boolean;
+    tone?: 'professional' | 'friendly' | 'critical' | 'instructional';
+    rules?: string[];   // Strict rules the AI must enforce
+    ignore?: string[];  // Glob patterns for files to skip
+  };
+  chat?: {
+    enabled?: boolean;
+    persona?: string;       // Custom persona (e.g., "Security Expert")
+    instructions?: string[]; // specific guidelines for chat replies
+  };
+}
+```
+
+### Example `CODESPECTER.yml`
+Here is a sample configuration you can copy to get started:
+```yml
+version: 1.0
+
+review:
+  enabled: true
+  tone: "professional"
+  
+  # High Priority Rules (The AI must obey these above all else)
+  rules:
+    - "STRICT: Do not use `console.log` in production code."
+    - "STRICT: All database queries must use the Prisma singleton."
+    - "Prefer functional programming patterns over loops where possible."
+  
+  # Files to ignore during review
+  ignore:
+    - "db/migrations/*"
+    - "**/*.test.ts"
+    - "dist/**"
+
+chat:
+  enabled: true
+  persona: "Principal Software Architect"
+  
+  # Instructions for replying to user comments
+  instructions:
+    - "When asked for code, provide only the snippet and a brief explanation."
+    - "Assume the user is using PostgreSQL and TypeScript."
 ```
 
 ---
