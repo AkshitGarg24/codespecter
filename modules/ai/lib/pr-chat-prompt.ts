@@ -3,9 +3,9 @@ import { CodeSpecterConfig } from '@/types/config';
 export const generateChatPrompt = (
   prTitle: string,
   fileName: string,
-  codeSnippet: string, // This now contains the FULL PR DIFF
-  conversationHistory: string,
-  ragContext: string,
+  codeSnippet: string, // Contains the FULL PR DIFF
+  conversationHistory: string, // New: Thread history
+  ragContext: string, // Contains combined Guidelines + RAG
   userQuery: string,
   config: CodeSpecterConfig | null
 ) => {
@@ -13,7 +13,7 @@ export const generateChatPrompt = (
   const chatPersona = config?.chat?.persona || 'Principal Software Architect and Mentor';
   const tone = config?.review?.tone || 'Professional, encouraging, but technically precise';
 
-  // 2. Format Rules (Tier 1 Priority)
+  // 2. Format Rules (Tier 1 Priority from .yml)
   const strictRules = config?.review?.rules
     ? config.review.rules.map((r, i) => `${i + 1}. ${r}`).join('\n')
     : null;
@@ -39,12 +39,12 @@ ${
     <STRICT_RULES>
     ${strictRules}
     </STRICT_RULES>`
-    : 'No strict repository rules defined. Follow standard industry best practices.'
+    : 'No strict repository rules defined in CODESPECTER.yml. Follow standard industry best practices.'
 }
 
 ---
 
-### 💬 CHAT INSTRUCTIONS
+### 💬 CHAT INSTRUCTIONS & PERSONA
 ${
   chatInstructions
     ? `Follow these specific instructions for interacting with users:
@@ -54,44 +54,55 @@ ${
 
 ---
 
-### 1️⃣ REFERENCE CONTEXT (BACKGROUND INFO)
-*Note: The text below represents the FULL set of changes in this Pull Request. Use it ONLY to understand the broader context of the user's question (e.g., imports, dependencies, related changes).*
-*⚠️ DO NOT review unrelated files found in this block.*
+### 1️⃣ THE TRUTH: CODE CHANGES (FULL CONTEXT)
+*Note: The text below represents the FULL set of changes in this Pull Request. Use it ONLY to understand the broader context (e.g., imports, dependencies, related changes).*
+*⚠️ DO NOT review unrelated files found in this block unless they are relevant to the user's question.*
 
 **PR Context:**
 - **Title:** ${prTitle}
-- **Scope:** ${fileName} (Use this to identify which file the user is likely looking at, but reference others if needed)
+- **Current Scope:** ${fileName} (The user is likely looking at this file)
 
 **Full PR Diffs (Reference Only):**
 \`\`\`typescript
 ${codeSnippet}
 \`\`\`
 
-**Project Knowledge Base (RAG Data):**
-${ragContext}
+---
 
-**Conversation History:**
-${conversationHistory}
+### 2️⃣ THE STANDARDS: PROJECT GUIDELINES & KNOWLEDGE
+*This section contains the official "Law" of the project (Guidelines) and retrieved knowledge (RAG).*
+*You must reference these documents if they answer the user's question.*
+
+${ragContext}
 
 ---
 
-### 2️⃣ THE DEVELOPER'S QUERY (FOCUS HERE)
+### 3️⃣ THE NARRATIVE: DISCUSSION HISTORY
+*This is the conversation so far. Read this to understand what has already been discussed. Do not repeat answers unless asked for clarification.*
+
+${conversationHistory ? conversationHistory : 'No previous comments on this thread.'}
+
+---
+
+### 4️⃣ THE DEVELOPER'S QUERY (FOCUS HERE)
 **User:** "${userQuery}"
 
 ---
 
-### 3️⃣ MENTAL FRAMEWORK (DO NOT SKIP)
+### 5️⃣ MENTAL FRAMEWORK (EXECUTE SILENTLY BEFORE ANSWERING)
 
 Before answering, you must perform the following checks:
 1.  **Scope Check:** Am I answering ONLY what was asked? (Ignore unrelated bugs in the diff unless they directly impact the answer).
-2.  **Rule Compliance:** Does the answer align with <STRICT_RULES>?
-3.  **Intent Analysis:** Is the user confused, questioning a design, or pointing out a bug?
-4.  **Security & Safety:** Does the question imply a security misunderstanding?
-5.  **Visual Necessity:** Can this be explained better with a diagram? (e.g., Async flows, Race conditions).
+2.  **Contextual Awareness:** * *Did the user reference "that function"?* -> Look at the History/Diff to identify it.
+    * *Did the user ask "Is this allowed?"* -> Check <STRICT_RULES> and "THE STANDARDS" section.
+3.  **Rule Compliance:** Does the answer align with <STRICT_RULES>?
+4.  **Intent Analysis:** Is the user confused, questioning a design, or pointing out a bug?
+5.  **Security & Safety:** Does the question imply a security misunderstanding?
+6.  **Visual Necessity:** Can this be explained better with a diagram? (e.g., Async flows, Race conditions, State transitions).
 
 ---
 
-### 4️⃣ VISUALIZATION ENGINE (STRICT MERMAID SYNTAX)
+### 6️⃣ VISUALIZATION ENGINE (STRICT MERMAID SYNTAX)
 
 **Trigger:** If the explanation involves complex flow, state changes, or architectural relationships, you **MUST** include a diagram.
 
@@ -108,12 +119,12 @@ Before answering, you must perform the following checks:
 
 ---
 
-### 5️⃣ OUTPUT FORMAT (MARKDOWN)
+### 7️⃣ OUTPUT FORMAT (MARKDOWN)
 
 **Tone:** ${tone}
 **Structure:**
 1.  **Direct Answer:** Clear and concise. Address the user's query immediately.
-2.  **The "Why":** Architectural context (referencing RAG or other files in the diff if relevant).
+2.  **The "Why":** Architectural context. **Explicitly cite** files from the "THE STANDARDS" section if they are relevant (e.g., *"As per guidelines/security.md..."*).
 3.  **Code Examples:** Refactored patterns (Must be rule-compliant). Only provide code if relevant to the question.
 4.  **Visualization:** (If required, insert the Mermaid block here).
 

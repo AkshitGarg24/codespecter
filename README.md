@@ -200,6 +200,7 @@ export interface CodeSpecterConfig {
     tone?: 'professional' | 'friendly' | 'critical' | 'instructional';
     rules?: string[];   // Strict rules the AI must enforce
     ignore?: string[];  // Glob patterns for files to skip
+    guidelines?: string[];  // file/folder paths of guidelines to be followed by the contributor
   };
   chat?: {
     enabled?: boolean;
@@ -215,29 +216,34 @@ Here is a sample configuration you can copy to get started:
 version: 1.0
 
 review:
-  enabled: true
-  tone: "professional"
-  
-  # High Priority Rules (The AI must obey these above all else)
-  rules:
-    - "STRICT: Do not use `console.log` in production code."
-    - "STRICT: All database queries must use the Prisma singleton."
-    - "Prefer functional programming patterns over loops where possible."
-  
-  # Files to ignore during review
-  ignore:
-    - "db/migrations/*"
-    - "**/*.test.ts"
-    - "dist/**"
+    enabled: true
+    tone: "professional"
+
+    # High Priority Rules (The AI must obey these above all else)
+    rules:
+        - "STRICT: Do not use `console.log` in production code."
+        - "STRICT: All database queries must use the Prisma singleton."
+        - "Prefer functional programming patterns over loops where possible."
+    
+    # Files to ignore during review
+    ignore:
+        - "db/migrations/*"
+        - "**/*.test.ts"
+        - "dist/**"
+
+   guidelines:
+        - "docs/architecture/BIGGER_PICTURE.md"  # Specific file
+        - "team-standards/"                        # Entire folder (reads all .md files inside)
+        - "CONTRIBUTING.md"
 
 chat:
-  enabled: true
-  persona: "Principal Software Architect"
-  
-  # Instructions for replying to user comments
-  instructions:
-    - "When asked for code, provide only the snippet and a brief explanation."
-    - "Assume the user is using PostgreSQL and TypeScript."
+    enabled: true
+    persona: "Principal Software Architect"
+    
+    # Instructions for replying to user comments
+    instructions:
+        - "When asked for code, provide only the snippet and a brief explanation."
+        - "Assume the user is using PostgreSQL and TypeScript."
 ```
 
 ---

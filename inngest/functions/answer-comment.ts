@@ -36,8 +36,17 @@ export const answerPrComment = inngest.createFunction(
 
     const octokit = new Octokit({ auth: token });
 
-    // 3. FETCH FULL PR CONTEXT (All Files Changed)
-    // We get the specific PR details + ALL diffs to give the AI "God Mode" vision
+    // -------------------------------------------------------
+    // STEP 2.5: CONFIG LOAD (Moved Earlier)
+    // -------------------------------------------------------
+    // We need config early to know where to look for guidelines
+    const config = await step.run('fetch-config', async () => {
+      return await fetchProjectConfig(octokit, owner, repo);
+    });
+
+    // -------------------------------------------------------
+    // STEP 3: FETCH FULL PR CONTEXT (Diffs + Metadata)
+    // -------------------------------------------------------
     const prContext = await step.run('fetch-diff-context', async () => {
       // A. Get PR Title/Desc
       const { data: pr } = await octokit.rest.pulls.get({
@@ -46,14 +55,14 @@ export const answerPrComment = inngest.createFunction(
         pull_number: prNumber,
       });
 
-      // B. Get ALL Changed Files (Same logic as review-pr.ts)
+      // B. Get ALL Changed Files
       const { data: files } = await octokit.request(
         'GET /repos/{owner}/{repo}/pulls/{pull_number}/files',
         {
           owner,
           repo,
           pull_number: prNumber,
-          per_page: 100, // Fetch up to 100 files
+          per_page: 100,
         }
       );
 
@@ -73,35 +82,151 @@ export const answerPrComment = inngest.createFunction(
 
       return {
         title: pr.title,
-        diffs: formattedDiffs, // Contains the ENTIRE PR changes
+        description: pr.body,
+        diffs: formattedDiffs,
       };
     });
 
-    // 4. RAG SEARCH (Query Pinecone with the User's Question)
+    // -------------------------------------------------------
+    // STEP 4: FETCH GUIDELINES (The "Law")
+    // -------------------------------------------------------
+    const projectGuidelines = await step.run('fetch-guidelines', async () => {
+      try {
+        const pathsToFetch = config?.review?.guidelines || [];
+        if (pathsToFetch.length === 0) return '';
+
+        // Helper: Fetch single file content
+        const fetchContent = async (filePath: string) => {
+          try {
+            const { data } = await octokit.rest.repos.getContent({
+              owner,
+              repo,
+              path: filePath,
+            });
+            if ('content' in data && !Array.isArray(data)) {
+              const text = Buffer.from(data.content, 'base64').toString('utf-8');
+              return `\n\n--- GUIDELINE FILE: ${filePath} ---\n${text}`;
+            }
+          } catch (e) {
+            return ''; // Fail silently for single files
+          }
+          return '';
+        };
+
+        // 1. Discovery Phase (Parallel)
+        const discoveryResults = await Promise.all(
+          pathsToFetch.map(async (path) => {
+            try {
+              const { data } = await octokit.rest.repos.getContent({
+                owner,
+                repo,
+                path,
+              });
+              if (Array.isArray(data)) {
+                // Folder: return all .md/.txt files
+                return data
+                  .filter((i) => i.type === 'file' && i.name.match(/\.(md|txt)$/i))
+                  .map((f) => f.path);
+              } else {
+                // File: return path
+                return [path];
+              }
+            } catch (e) {
+              return [];
+            }
+          })
+        );
+
+        // 2. Download Phase (Parallel)
+        const filesToDownload = Array.from(new Set(discoveryResults.flat()));
+        if (filesToDownload.length === 0) return '';
+
+        const contentResults = await Promise.all(
+          filesToDownload.map((filePath) => fetchContent(filePath))
+        );
+
+        return contentResults.join('');
+      } catch (error) {
+        console.error('Failed to fetch guidelines', error);
+        return '';
+      }
+    });
+
+    // -------------------------------------------------------
+    // STEP 5: FETCH CONVERSATION HISTORY (Context)
+    // -------------------------------------------------------
+    const conversationHistory = await step.run('fetch-thread-history', async () => {
+      // Fetch General PR Comments (Issue Comments)
+      const { data: issueComments } = await octokit.rest.issues.listComments({
+        owner,
+        repo,
+        issue_number: prNumber,
+      });
+
+      // Fetch Review Comments (Code-specific comments)
+      const { data: reviewComments } = await octokit.rest.pulls.listReviewComments({
+        owner,
+        repo,
+        pull_number: prNumber,
+      });
+
+      // Normalize and Merge
+      const allComments = [
+        ...issueComments.map((c) => ({
+          user: c.user?.login || 'Unknown',
+          body: c.body || '',
+          date: c.created_at,
+          type: 'General Comment',
+        })),
+        ...reviewComments.map((c) => ({
+          user: c.user?.login || 'Unknown',
+          body: c.body || '',
+          date: c.created_at,
+          type: `Code Comment (File: ${c.path})`,
+        })),
+      ];
+
+      // Sort by Date (Oldest to Newest)
+      allComments.sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      // Format as a readable script
+      return allComments
+        .map((c) => `[${c.date}] ${c.user} (${c.type}): ${c.body}`)
+        .join('\n');
+    });
+
+    // -------------------------------------------------------
+    // STEP 6: RAG SEARCH
+    // -------------------------------------------------------
     const ragDocs = await step.run('rag-lookup', async () => {
-      // We look for context relevant to the user's specific question
       const query = `Question: ${body}. PR Context: ${prContext.title}`;
       const matches = await retrieveContext(query, repoId.toString());
       return matches.join('\n\n');
     });
 
-    // 5. CONFIG LOAD
-    const config = await step.run('fetch-config', async () => {
-      return await fetchProjectConfig(octokit, owner, repo);
-    });
-
-    // 6. GENERATE ANSWER
+    // -------------------------------------------------------
+    // STEP 7: GENERATE ANSWER
+    // -------------------------------------------------------
     const aiResponse = await step.run('generate-answer', async () => {
       const cleanQuery = body.replace('@codespecter-ai-review', '').trim();
 
-      // We pass the FULL PR DIFFS into the 'codeSnippet' field of the prompt
-      // This tricks the prompt into treating the entire PR as the "snippet"
+      // Combine Guidelines + RAG for the "Knowledge Base" slot
+      const combinedContext = `
+      === 📜 PROJECT GUIDELINES (STRICT) ===
+      ${projectGuidelines || 'No specific guidelines found.'}
+
+      === 🧠 KNOWLEDGE BASE (RAG) ===
+      ${ragDocs}
+      `.trim();
+
       const prompt = generateChatPrompt(
         prContext.title,
-        'Entire Pull Request', // File Name context
-        prContext.diffs,       // <-- PASSING ALL DIFFS HERE
-        'User is asking a question about the PR changes above.', 
-        ragDocs,
+        'Entire Pull Request',
+        prContext.diffs,
+        conversationHistory, // <--- Passing full thread history here
+        combinedContext,     // <--- Passing Guidelines + RAG here
         cleanQuery,
         config
       );
@@ -109,16 +234,17 @@ export const answerPrComment = inngest.createFunction(
       const { text } = await generateText({
         model: google('gemini-2.5-flash'),
         prompt: prompt,
-        temperature: 0.3, // Slightly lower temp for more accurate technical answers
+        temperature: 0.3,
       });
 
       return text;
     });
 
-    // 7. POST REPLY
+    // -------------------------------------------------------
+    // STEP 8: POST REPLY
+    // -------------------------------------------------------
     await step.run('post-reply', async () => {
       try {
-        // Try replying to the thread if it's a review comment
         await octokit.rest.pulls.createReplyForReviewComment({
           owner,
           repo,
@@ -127,7 +253,6 @@ export const answerPrComment = inngest.createFunction(
           body: aiResponse,
         });
       } catch (e) {
-        // Fallback: Post as a general comment
         await octokit.rest.issues.createComment({
           owner,
           repo,

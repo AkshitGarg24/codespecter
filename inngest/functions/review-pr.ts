@@ -97,34 +97,74 @@ export const reviewPr = inngest.createFunction(
     // -------------------------------------------------------
     const projectGuidelines = await step.run('fetch-guidelines', async () => {
       try {
-        const criticalFiles = [
-          'BIGGER_PICTURE.md',
-          'guidelines/03-api-development-standards.md',
-          'guidelines/12-security-hardening.md',
-        ];
+        // 1. Strict Config Check
+        const pathsToFetch = config?.review?.guidelines || [];
+        if (pathsToFetch.length === 0) {
+          console.log('No guideline paths defined in config. Skipping.');
+          return '';
+        }
 
-        let collectedGuidelines = '';
-
-        for (const path of criticalFiles) {
+        // Helper: Fetches raw content for a single file path
+        const fetchContent = async (filePath: string) => {
           try {
             const { data } = await octokit.rest.repos.getContent({
               owner,
               repo,
-              path,
+              path: filePath,
             });
 
             if ('content' in data && !Array.isArray(data)) {
-              const content = Buffer.from(data.content, 'base64').toString(
-                'utf-8'
-              );
-              collectedGuidelines += `\n\n--- FILE: ${path} ---\n${content}`;
+              const text = Buffer.from(data.content, 'base64').toString('utf-8');
+              return `\n\n--- GUIDELINE FILE: ${filePath} ---\n${text}`;
             }
           } catch (e) {
-            console.warn(`Guideline file not found: ${path}`);
+            console.warn(`Failed to fetch content for: ${filePath}`);
           }
-        }
+          return '';
+        };
 
-        return collectedGuidelines;
+        // 2. Discovery Phase (Parallel)
+        // We resolve what files need to be downloaded without downloading them yet
+        const discoveryResults = await Promise.all(
+          pathsToFetch.map(async (path) => {
+            try {
+              const { data } = await octokit.rest.repos.getContent({
+                owner,
+                repo,
+                path,
+              });
+
+              if (Array.isArray(data)) {
+                // It's a Folder: Extract all .md/.txt file paths
+                return data
+                  .filter(
+                    (item) =>
+                      item.type === 'file' && item.name.match(/\.(md|txt)$/i)
+                  )
+                  .map((f) => f.path);
+              } else {
+                // It's a File: Return just this path
+                return [path];
+              }
+            } catch (e) {
+              console.warn(`Path not found: ${path}`);
+              return [];
+            }
+          })
+        );
+
+        // Flatten the array of arrays into a single list of unique file paths
+        const filesToDownload = Array.from(new Set(discoveryResults.flat()));
+
+        if (filesToDownload.length === 0) return '';
+
+        // 3. Download Phase (Parallel)
+        // Fetch all identified files simultaneously
+        const contentResults = await Promise.all(
+          filesToDownload.map((filePath) => fetchContent(filePath))
+        );
+
+        return contentResults.join('');
       } catch (error) {
         console.error('Failed to fetch guidelines', error);
         return '';
