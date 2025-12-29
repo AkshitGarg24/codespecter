@@ -39,12 +39,13 @@ model Repository {
   isPrivate       Boolean
   stargazerCount  Int     @default(0)
   primaryLanguage String?
-  languageColor   String? 
+  languageColor   String?
   userId          String
   user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   @@index([userId])
   @@map("repository")
